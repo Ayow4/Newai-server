@@ -4,7 +4,7 @@ import ImageKit from "imagekit";
 import mongoose from "mongoose";
 import Chat from "./models/chat.js";
 import UserChats from "./models/userChats.js";
-import FeedBack from "./models/feedBack.js";
+// import FeedBack from "./models/feedBack.js";
 import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node'
 import dotenv from "dotenv";
 dotenv.config();
@@ -150,31 +150,31 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
 
 
 // feedback
-app.post("/api/feedback", ClerkExpressRequireAuth(), async (req, res) => {
-  const userId = req.auth.userId;
-  const { rating, comment } = req.body;
+// app.post("/api/feedback", ClerkExpressRequireAuth(), async (req, res) => {
+//   const userId = req.auth.userId;
+//   const { rating, comment } = req.body;
 
-  console.log("Received feedback request:", req.body);
+//   console.log("Received feedback request:", req.body);
 
-  try {
-    const newFeedback = new FeedBack({
-      userId,
-      rating,
-      comment,
-    });
+//   try {
+//     const newFeedback = new FeedBack({
+//       userId,
+//       rating,
+//       comment,
+//     });
 
-    console.log("Saving feedback to database...");
+//     console.log("Saving feedback to database...");
 
-    await newFeedback.save();
+//     await newFeedback.save();
 
-    console.log("Feedback saved successfully!");
+//     console.log("Feedback saved successfully!");
 
-    res.status(201).send("Feedback submitted successfully!");
-  } catch (err) {
-    console.error("Error submitting feedback:", err);
-    res.status(500).send("Error submitting feedback!");
-  }
-});
+//     res.status(201).send("Feedback submitted successfully!");
+//   } catch (err) {
+//     console.error("Error submitting feedback:", err);
+//     res.status(500).send("Error submitting feedback!");
+//   }
+// });
 
 // app.get("/api/feedback", async (req, res) => {
 //   try {
