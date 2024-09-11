@@ -193,6 +193,18 @@ app.use((err, req, res, next) => {
   res.status(401).send('Unauthenticated!')
 });
 
+app.get("/read", ClerkExpressRequireAuth(), async (req, res) => {
+  const userId = req.auth.userId;  // Ensure the user is authenticated
+
+  try {
+    const chats = await Chat.find({ userId }); // Fetch all chats for the authenticated user
+    res.status(200).send(chats);
+  } catch (err) {
+    console.error("Error fetching chats:", err);
+    res.status(500).send("Error fetching chats!");
+  }
+});
+
 app.listen(port, () => {
   connect()
   console.log("Server running on 3000")
