@@ -197,7 +197,12 @@ app.get("/read", ClerkExpressRequireAuth(), async (req, res) => {
   try {
     const userId = req.auth.userId; // Ensure the user is authenticated
     const userChats = await UserChats.find({ userId }); // Fetch user chats for the authenticated user
-    res.status(200).send(userChats); // Send the fetched data
+
+    if (!userChats.length) {
+      return res.status(404).send("No user chats found.");
+    }
+
+    res.status(200).send(userChats);
   } catch (err) {
     console.error("Error fetching user chats:", err);
     res.status(500).send("Error fetching user chats!"); // Send an error message
