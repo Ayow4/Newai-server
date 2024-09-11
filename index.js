@@ -6,12 +6,12 @@ import ImageKit from "imagekit";
 import mongoose from "mongoose";
 import Chat from "./models/chat.js";
 import UserChats from "./models/userChats.js";
-import Feedback from "./models/feedBack.js";
+import FeedBack from "./models/feedBack.js";
 import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node'
 import dotenv from "dotenv";
 dotenv.config();
 
-const port = process.env.PORT || 3000;
+// const port = process.env.PORT || 3000;
 const app = express();
 
 const __filename = fileURLToPath(import.meta.url)
@@ -161,7 +161,7 @@ app.post("/api/feedback", ClerkExpressRequireAuth(), async (req, res) => {
   console.log("Received feedback request:", req.body);
 
   try {
-    const newFeedback = new Feedback({
+    const newFeedback = new FeedBack({
       userId,
       rating,
       comment,
@@ -190,7 +190,7 @@ app.post("/api/feedback", ClerkExpressRequireAuth(), async (req, res) => {
 //     res.status(500).send("Error fetching feedback!");
 //   }
 // });
-//////
+// ////
 
 app.use((err, req, res, next) => {
   console.error(err.stack)
