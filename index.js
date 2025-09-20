@@ -3,7 +3,7 @@ import cors from "cors";
 import mongoose from "mongoose";
 import Chat from "./models/chat.js";
 import UserChats from "./models/userChats.js";
-import { ClerkExpressRequireAuth, clerkClient } from "@clerk/clerk-sdk-node";
+import { ClerkExpressRequireAuth } from "@clerk/clerk-sdk-node";
 import dotenv from "dotenv";
 import ImageKit from "imagekit";
 
@@ -17,7 +17,6 @@ app.use(cors({
   origin: process.env.CLIENT_URL,
   credentials: true,
 }));
-
 app.use(express.json());
 
 // ------------------- IMAGEKIT -------------------
@@ -30,13 +29,12 @@ const imagekit = new ImageKit({
 // ------------------- MONGO CONNECTION -------------------
 const connectMongo = async () => {
   if (mongoose.connection.readyState >= 1) return;
-
   try {
     console.log("⏳ Connecting to MongoDB...");
     await mongoose.connect(process.env.MONGO, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      dbName: "test", // explicitly your DB
+      dbName: "test",
     });
     console.log("✅ Connected to MongoDB:", mongoose.connection.name);
   } catch (err) {
@@ -123,7 +121,7 @@ app.get("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   }
 });
 
-// Update chat with new messages
+// Update chat
 app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
   const userId = req.auth.userId;
@@ -147,15 +145,15 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   }
 });
 
-// Test route to check server & Mongo
-app.get("/api/test", async (req, res) => {
-  await connectMongo();
-  res.json({ msg: "Server running", mongo: mongoose.connection.readyState });
-});
-
 // ------------------- ERROR HANDLER -------------------
+// Catch Clerk auth errors and respond with 401 instead of crashing
 app.use((err, req, res, next) => {
   console.error("❌ Error middleware:", err.stack);
+
+  if (err.name === "ClerkAuthError" || err.message.includes("Unauthenticated")) {
+    return res.status(401).json({ message: "Unauthenticated" });
+  }
+
   res.status(500).send("Internal server error");
 });
 
