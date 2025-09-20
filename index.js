@@ -4,44 +4,36 @@ import ImageKit from "imagekit";
 import mongoose from "mongoose";
 import Chat from "./models/chat.js";
 import UserChats from "./models/userChats.js";
-import { ClerkExpressRequireAuth } from "@clerk/clerk-sdk-node";
+// import FeedBack from "./models/feedBack.js";
+import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node'
 import dotenv from "dotenv";
 dotenv.config();
 
 const port = process.env.PORT || 3000;
 const app = express();
 
-// ✅ MongoDB connection (serverless-safe)
+
+app.use(cors({
+  origin: process.env.CLIENT_URL,
+  credentials: true,
+})
+);
+
+app.use(express.json())
+
 const connect = async () => {
-  if (mongoose.connection.readyState >= 1) {
-    return; // already connected or connecting
-  }
   try {
-    await mongoose.connect(process.env.MONGO, {
-      dbName: "test", // 👈 use your actual DB name
-    });
-    console.log("✅ Connected to MongoDB");
+    await mongoose.connect(process.env.MONGO);
+    console.log('Connected to MongoDB!');
   } catch (err) {
-    console.error("❌ MongoDB connection error:", err);
-    throw err;
+    console.error("Failed to connect to MongoDB: ", err);
   }
 };
 
-// ✅ Middlewares
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL,
-    credentials: true,
-  })
-);
-app.use(express.json());
-
-// ✅ Root route
-app.get("/", (req, res) => {
-  res.send("Welcome to the backend!");
+app.get('/', (req, res) => {
+  res.send('Welcome to the backend!');
 });
 
-// ✅ ImageKit setup
 const imagekit = new ImageKit({
   urlEndpoint: process.env.IMAGE_KIT_ENDPOINT,
   publicKey: process.env.IMAGE_KIT_PUBLIC_KEY,
@@ -53,31 +45,39 @@ app.get("/api/upload", (req, res) => {
   res.send(result);
 });
 
-// ✅ Create new chat
 app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
-  await connect();
   const userId = req.auth.userId;
   const { text } = req.body;
 
   try {
+    // CREATE A NEW CHAT
     const newChat = new Chat({
-      userId,
+      userId: userId,
       history: [{ role: "user", parts: [{ text }] }],
     });
 
     const savedChat = await newChat.save();
 
-    const userChats = await UserChats.find({ userId });
+    // CHECK IF THE USERCHATS EXISTS
+    const userChats = await UserChats.find({ userId: userId });
 
+    // IF DOESN'T EXISTS CREATE A NEW ONE AND ADD THE CHAT IN THE CHATS ARRAY
     if (!userChats.length) {
       const newUserChats = new UserChats({
-        userId,
-        chats: [{ _id: savedChat._id, title: text.substring(0, 40) }],
+        userId: userId,
+        chats: [
+          {
+            _id: savedChat._id,
+            title: text.substring(0, 40),
+          },
+        ],
       });
+
       await newUserChats.save();
     } else {
+      // IF EXISTS, PUSH THE CHAT TO THE EXISTING ARRAY
       await UserChats.updateOne(
-        { userId },
+        { userId: userId },
         {
           $push: {
             chats: {
@@ -87,47 +87,46 @@ app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
           },
         }
       );
-    }
 
-    res.status(201).send(savedChat._id);
+      res.status(201).send(newChat._id);
+    }
   } catch (err) {
-    console.error(err);
+    console.log(err);
     res.status(500).send("Error creating chat!");
   }
 });
 
-// ✅ Get all chats of a user
 app.get("/api/userchats", ClerkExpressRequireAuth(), async (req, res) => {
-  await connect();
   const userId = req.auth.userId;
 
   try {
-    const userChats = await UserChats.find({ userId });
-    res.status(200).send(userChats[0]?.chats || []);
+
+    const userChats = await UserChats.find({ userId })
+
+    res.status(200).send(userChats[0].chats);
+
   } catch (err) {
-    console.error(err);
+    console.log(err);
     res.status(500).send("Error fetching chat!");
   }
 });
 
-// ✅ Get a specific chat
 app.get("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
-  await connect();
   const userId = req.auth.userId;
 
   try {
     const chat = await Chat.findOne({ _id: req.params.id, userId });
+
     res.status(200).send(chat);
   } catch (err) {
-    console.error(err);
+    console.log(err);
     res.status(500).send("Error fetching chat!");
   }
 });
 
-// ✅ Update a chat (add Q/A)
 app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
-  await connect();
   const userId = req.auth.userId;
+
   const { question, answer, img } = req.body;
 
   const newItems = [
@@ -138,24 +137,68 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   ];
 
   try {
-    const updateChat = await Chat.updateOne(
-      { _id: req.params.id, userId },
-      { $push: { history: { $each: newItems } } }
-    );
+
+    const updateChat = await Chat.updateOne({ _id: req.params.id, userId },{
+      $push:{
+        history:{
+          $each: newItems,
+        },
+      }
+    });
     res.status(200).send(updateChat);
   } catch (err) {
-    console.error(err);
+    console.log(err);
     res.status(500).send("Error adding conversation!");
   }
-});
+})
 
-// ✅ Error handler
-app.use((err, req, res, next) => {
-  console.error("Global error:", err.stack);
-  res.status(401).send("Unauthenticated!");
-});
 
-// ✅ Start server
+// // feedback
+// // app.post("/api/feedback", ClerkExpressRequireAuth(), async (req, res) => {
+// //   const userId = req.auth.userId;
+// //   const { rating, comment } = req.body;
+
+// //   console.log("Received feedback request:", req.body);
+
+// //   try {
+// //     const newFeedback = new FeedBack({
+// //       userId,
+// //       rating,
+// //       comment,
+// //     });
+
+// //     console.log("Saving feedback to database...");
+
+// //     await newFeedback.save();
+
+// //     console.log("Feedback saved successfully!");
+
+// //     res.status(201).send("Feedback submitted successfully!");
+// //   } catch (err) {
+// //     console.error("Error submitting feedback:", err);
+// //     res.status(500).send("Error submitting feedback!");
+// //   }
+// // });
+// // -------------------------------------------------- 
+// // app.get("/api/feedback", async (req, res) => {
+// //   try {
+// //     const feedback = await Feedback.find().exec();
+
+// //     res.status(200).send(feedback);
+// //   } catch (err) {
+// //     console.log(err);
+// //     res.status(500).send("Error fetching feedback!");
+// //   }
+// // });
+// // ////
+
+// app.use((err, req, res, next) => {
+//   console.error(err.stack)
+//   res.status(401).send('Unauthenticated!')
+// });
+// // ---------try------------------
+
 app.listen(port, () => {
-  console.log("🚀 Server running on port", port);
+  connect()
+  console.log("Server running on 3000")
 });
