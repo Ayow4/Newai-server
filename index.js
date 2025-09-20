@@ -3,7 +3,7 @@ import cors from "cors";
 import mongoose from "mongoose";
 import Chat from "./models/chat.js";
 import UserChats from "./models/userChats.js";
-import { ClerkExpressRequireAuth, clerkClient } from "@clerk/clerk-sdk-node";
+import { ClerkExpressRequireAuth } from "@clerk/clerk-sdk-node";
 import dotenv from "dotenv";
 import ImageKit from "imagekit";
 
@@ -17,7 +17,6 @@ app.use(cors({
   origin: process.env.CLIENT_URL,
   credentials: true,
 }));
-
 app.use(express.json());
 
 // ------------------- IMAGEKIT -------------------
@@ -36,7 +35,7 @@ const connectMongo = async () => {
     await mongoose.connect(process.env.MONGO, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      dbName: "test", // explicitly your DB
+      dbName: "test",
     });
     console.log("✅ Connected to MongoDB:", mongoose.connection.name);
   } catch (err) {
@@ -61,6 +60,8 @@ app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
   const userId = req.auth.userId;
   const { text } = req.body;
+
+  if (!userId) return res.status(401).send("Unauthenticated");
 
   try {
     const newChat = new Chat({
@@ -95,11 +96,14 @@ app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
 // Get all user chats
 app.get("/api/userchats", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
-  const userId = req.auth.userId;
 
   try {
+    const userId = req.auth.userId;
+    if (!userId) return res.status(200).json([]); // no user session
+
     const userChats = await UserChats.findOne({ userId });
     if (!userChats) return res.status(200).json([]);
+    
     res.status(200).json(userChats.chats);
   } catch (err) {
     console.error("Error fetching user chats:", err);
@@ -112,6 +116,8 @@ app.get("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
   const userId = req.auth.userId;
   const { id } = req.params;
+
+  if (!userId) return res.status(401).send("Unauthenticated");
 
   try {
     const chat = await Chat.findOne({ _id: id, userId });
@@ -130,6 +136,8 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   const { id } = req.params;
   const { question, answer, img } = req.body;
 
+  if (!userId) return res.status(401).send("Unauthenticated");
+
   const newItems = [
     ...(question ? [{ role: "user", parts: [{ text: question }], ...(img && { img }) }] : []),
     { role: "model", parts: [{ text: answer }] },
@@ -147,7 +155,7 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   }
 });
 
-// Test route to check server & Mongo
+// Test route
 app.get("/api/test", async (req, res) => {
   await connectMongo();
   res.json({ msg: "Server running", mongo: mongoose.connection.readyState });
@@ -156,6 +164,11 @@ app.get("/api/test", async (req, res) => {
 // ------------------- ERROR HANDLER -------------------
 app.use((err, req, res, next) => {
   console.error("❌ Error middleware:", err.stack);
+
+  if (err?.statusCode === 401 || err?.message?.includes("Unauthenticated")) {
+    return res.status(401).send("Unauthenticated");
+  }
+
   res.status(500).send("Internal server error");
 });
 
