@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import ImageKit from "imagekit";
 
 dotenv.config();
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -16,6 +17,7 @@ app.use(cors({
   origin: process.env.CLIENT_URL,
   credentials: true,
 }));
+
 app.use(express.json());
 
 // ------------------- IMAGEKIT -------------------
@@ -34,7 +36,7 @@ const connectMongo = async () => {
     await mongoose.connect(process.env.MONGO, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      dbName: "test",
+      dbName: "test", // explicitly your DB
     });
     console.log("✅ Connected to MongoDB:", mongoose.connection.name);
   } catch (err) {
@@ -44,15 +46,17 @@ const connectMongo = async () => {
 };
 
 // ------------------- ROUTES -------------------
-app.get("/", (req, res) => res.send("Welcome to the backend!"));
+app.get("/", (req, res) => {
+  res.send("Welcome to the backend!");
+});
 
-// ImageKit auth
+// ImageKit auth route
 app.get("/api/upload", (req, res) => {
   const result = imagekit.getAuthenticationParameters();
   res.send(result);
 });
 
-// Create chat
+// Create a new chat
 app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
   const userId = req.auth.userId;
@@ -63,15 +67,17 @@ app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
       userId,
       history: [{ role: "user", parts: [{ text }] }],
     });
+
     const savedChat = await newChat.save();
 
-    let userChats = await UserChats.findOne({ userId });
+    const userChats = await UserChats.findOne({ userId });
+
     if (!userChats) {
-      userChats = new UserChats({
+      const newUserChats = new UserChats({
         userId,
         chats: [{ _id: savedChat._id, title: text.substring(0, 40) }],
       });
-      await userChats.save();
+      await newUserChats.save();
     } else {
       await UserChats.updateOne(
         { userId },
@@ -79,21 +85,22 @@ app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
       );
     }
 
-    res.status(201).json(savedChat._id);
+    res.status(201).send(savedChat._id);
   } catch (err) {
     console.error("Error creating chat:", err);
     res.status(500).send("Error creating chat!");
   }
 });
 
-// Get user chats
+// Get all user chats
 app.get("/api/userchats", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
   const userId = req.auth.userId;
 
   try {
     const userChats = await UserChats.findOne({ userId });
-    res.status(200).json(userChats?.chats || []);
+    if (!userChats) return res.status(200).json([]);
+    res.status(200).json(userChats.chats);
   } catch (err) {
     console.error("Error fetching user chats:", err);
     res.status(500).send("Error fetching chat!");
@@ -116,7 +123,7 @@ app.get("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   }
 });
 
-// Update chat
+// Update chat with new messages
 app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
   const userId = req.auth.userId;
@@ -140,16 +147,25 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   }
 });
 
+// Test route to check server & Mongo
+app.get("/api/test", async (req, res) => {
+  await connectMongo();
+  res.json({ msg: "Server running", mongo: mongoose.connection.readyState });
+});
+
 // ------------------- ERROR HANDLER -------------------
 app.use((err, req, res, next) => {
   console.error("❌ Error middleware:", err.stack);
-  if (err.name === "ClerkAuthError") return res.status(401).send("Unauthenticated");
   res.status(500).send("Internal server error");
 });
 
 // ------------------- START SERVER -------------------
 connectMongo()
   .then(() => {
-    app.listen(port, () => console.log(`✅ Server running on port ${port}`));
+    app.listen(port, () => {
+      console.log(`✅ Server running on port ${port}`);
+    });
   })
-  .catch(err => console.error("❌ Failed to start server:", err));
+  .catch((err) => {
+    console.error("❌ Failed to start server:", err);
+  });
