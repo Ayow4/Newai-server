@@ -197,7 +197,10 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
 // });
 // ---------try------------------
 
-app.listen(port, () => {
-  connect()
-  console.log("Server running on 3000")
+connect().then(() => {
+  app.listen(port, () => {
+    console.log("✅ Server running on port", port);
+  });
+}).catch(err => {
+  console.error("❌ Failed to connect to MongoDB", err);
 });
