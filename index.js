@@ -154,48 +154,48 @@ app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
 
 
 // feedback
-app.post("/api/feedback", ClerkExpressRequireAuth(), async (req, res) => {
-  const userId = req.auth.userId;
-  const { rating, comment } = req.body;
+// app.post("/api/feedback", ClerkExpressRequireAuth(), async (req, res) => {
+//   const userId = req.auth.userId;
+//   const { rating, comment } = req.body;
 
-  console.log("Received feedback request:", req.body);
+//   console.log("Received feedback request:", req.body);
 
-  try {
-    const newFeedback = new FeedBack({
-      userId,
-      rating,
-      comment,
-    });
-
-    console.log("Saving feedback to database...");
-
-    await newFeedback.save();
-
-    console.log("Feedback saved successfully!");
-
-    res.status(201).send("Feedback submitted successfully!");
-  } catch (err) {
-    console.error("Error submitting feedback:", err);
-    res.status(500).send("Error submitting feedback!");
-  }
-});
-// -------------------------------------------------- 
-// app.get("/api/feedback", async (req, res) => {
 //   try {
-//     const feedback = await Feedback.find().exec();
+//     const newFeedback = new FeedBack({
+//       userId,
+//       rating,
+//       comment,
+//     });
 
-//     res.status(200).send(feedback);
+//     console.log("Saving feedback to database...");
+
+//     await newFeedback.save();
+
+//     console.log("Feedback saved successfully!");
+
+//     res.status(201).send("Feedback submitted successfully!");
 //   } catch (err) {
-//     console.log(err);
-//     res.status(500).send("Error fetching feedback!");
+//     console.error("Error submitting feedback:", err);
+//     res.status(500).send("Error submitting feedback!");
 //   }
 // });
-// ////
+// // -------------------------------------------------- 
+// // app.get("/api/feedback", async (req, res) => {
+// //   try {
+// //     const feedback = await Feedback.find().exec();
 
-app.use((err, req, res, next) => {
-  console.error(err.stack)
-  res.status(401).send('Unauthenticated!')
-});
+// //     res.status(200).send(feedback);
+// //   } catch (err) {
+// //     console.log(err);
+// //     res.status(500).send("Error fetching feedback!");
+// //   }
+// // });
+// // ////
+
+// app.use((err, req, res, next) => {
+//   console.error(err.stack)
+//   res.status(401).send('Unauthenticated!')
+// });
 // ---------try------------------
 
 app.listen(port, () => {
