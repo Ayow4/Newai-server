@@ -22,11 +22,18 @@ app.use(cors({
 app.use(express.json())
 
 const connect = async () => {
+  if (mongoose.connection.readyState >= 1) return;
+
   try {
-    await mongoose.connect(process.env.MONGO);
-    console.log('Connected to MongoDB!');
+    console.log("⏳ Connecting to MongoDB...");
+    await mongoose.connect(process.env.MONGO, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log("✅ Connected to MongoDB:", mongoose.connection.name);
   } catch (err) {
-    console.error("Failed to connect to MongoDB: ", err);
+    console.error("❌ MongoDB connection failed:", err.message);
+    throw err;
   }
 };
 
