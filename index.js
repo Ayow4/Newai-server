@@ -1,11 +1,11 @@
 import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
-import ImageKit from "imagekit";
 import Chat from "./models/chat.js";
 import UserChats from "./models/userChats.js";
-import { verifyToken } from "@clerk/clerk-sdk-node";
+import { ClerkExpressRequireAuth, clerkClient } from "@clerk/clerk-sdk-node";
+import dotenv from "dotenv";
+import ImageKit from "imagekit";
 
 dotenv.config();
 
@@ -36,29 +36,12 @@ const connectMongo = async () => {
     await mongoose.connect(process.env.MONGO, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      dbName: "test", // explicitly your DB
     });
     console.log("✅ Connected to MongoDB:", mongoose.connection.name);
   } catch (err) {
     console.error("❌ MongoDB connection failed:", err.message);
     throw err;
-  }
-};
-
-// ------------------- CUSTOM AUTH MIDDLEWARE -------------------
-const authMiddleware = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ message: "Unauthenticated" });
-
-  const token = authHeader.split(" ")[1];
-  if (!token) return res.status(401).json({ message: "Unauthenticated" });
-
-  try {
-    const verified = await verifyToken(token);
-    req.auth = { userId: verified.sub }; // attach userId to request
-    next();
-  } catch (err) {
-    console.error("❌ Clerk token verification failed:", err.message);
-    return res.status(401).json({ message: "Unauthenticated" });
   }
 };
 
@@ -73,8 +56,8 @@ app.get("/api/upload", (req, res) => {
   res.send(result);
 });
 
-// Create new chat
-app.post("/api/chats", authMiddleware, async (req, res) => {
+// Create a new chat
+app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
   const userId = req.auth.userId;
   const { text } = req.body;
@@ -84,15 +67,17 @@ app.post("/api/chats", authMiddleware, async (req, res) => {
       userId,
       history: [{ role: "user", parts: [{ text }] }],
     });
+
     const savedChat = await newChat.save();
 
-    let userChats = await UserChats.findOne({ userId });
+    const userChats = await UserChats.findOne({ userId });
+
     if (!userChats) {
-      userChats = new UserChats({
+      const newUserChats = new UserChats({
         userId,
         chats: [{ _id: savedChat._id, title: text.substring(0, 40) }],
       });
-      await userChats.save();
+      await newUserChats.save();
     } else {
       await UserChats.updateOne(
         { userId },
@@ -100,7 +85,7 @@ app.post("/api/chats", authMiddleware, async (req, res) => {
       );
     }
 
-    res.status(201).json(savedChat._id);
+    res.status(201).send(savedChat._id);
   } catch (err) {
     console.error("Error creating chat:", err);
     res.status(500).send("Error creating chat!");
@@ -108,7 +93,7 @@ app.post("/api/chats", authMiddleware, async (req, res) => {
 });
 
 // Get all user chats
-app.get("/api/userchats", authMiddleware, async (req, res) => {
+app.get("/api/userchats", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
   const userId = req.auth.userId;
 
@@ -123,7 +108,7 @@ app.get("/api/userchats", authMiddleware, async (req, res) => {
 });
 
 // Get single chat
-app.get("/api/chats/:id", authMiddleware, async (req, res) => {
+app.get("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
   const userId = req.auth.userId;
   const { id } = req.params;
@@ -139,7 +124,7 @@ app.get("/api/chats/:id", authMiddleware, async (req, res) => {
 });
 
 // Update chat with new messages
-app.put("/api/chats/:id", authMiddleware, async (req, res) => {
+app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
   await connectMongo();
   const userId = req.auth.userId;
   const { id } = req.params;
@@ -162,7 +147,7 @@ app.put("/api/chats/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// Test route
+// Test route to check server & Mongo
 app.get("/api/test", async (req, res) => {
   await connectMongo();
   res.json({ msg: "Server running", mongo: mongoose.connection.readyState });
