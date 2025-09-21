@@ -1,175 +1,171 @@
 import express from "express";
 import cors from "cors";
-import ImageKit from "imagekit";
 import mongoose from "mongoose";
 import Chat from "./models/chat.js";
 import UserChats from "./models/userChats.js";
-import { ClerkExpressRequireAuth } from '@clerk/clerk-sdk-node'
+import { ClerkExpressRequireAuth, clerkClient } from "@clerk/clerk-sdk-node";
 import dotenv from "dotenv";
+import ImageKit from "imagekit";
+
 dotenv.config();
 
-const port = process.env.PORT || 3000;
 const app = express();
+const port = process.env.PORT || 3000;
 
-
+// ------------------- MIDDLEWARE -------------------
 app.use(cors({
   origin: process.env.CLIENT_URL,
   credentials: true,
-})
-);
+}));
 
-// Hybrid auth: try Clerk, fallback to demo
-const requireAuthSafe = (req, res, next) => {
-  ClerkExpressRequireAuth()(req, res, (err) => {
-    if (err) {
-      console.warn("⚠️ Clerk auth failed, falling back to demo user");
-      req.auth = { userId: "demo-user" }; // fallback user
-    }
-    next();
-  });
-};
+app.use(express.json());
 
-app.use(express.json())
-
-const connect = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO);
-    console.log('Connected to MongoDB!');
-  } catch (err) {
-    console.error("Failed to connect to MongoDB: ", err);
-  }
-};
-
-app.get('/', (req, res) => {
-  res.send('Welcome to the backend!');
-});
-
+// ------------------- IMAGEKIT -------------------
 const imagekit = new ImageKit({
   urlEndpoint: process.env.IMAGE_KIT_ENDPOINT,
   publicKey: process.env.IMAGE_KIT_PUBLIC_KEY,
   privateKey: process.env.IMAGE_KIT_PRIVATE_KEY,
 });
 
+// ------------------- MONGO CONNECTION -------------------
+const connectMongo = async () => {
+  if (mongoose.connection.readyState >= 1) return;
+
+  try {
+    console.log("⏳ Connecting to MongoDB...");
+    await mongoose.connect(process.env.MONGO, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      dbName: "test", // explicitly your DB
+    });
+    console.log("✅ Connected to MongoDB:", mongoose.connection.name);
+  } catch (err) {
+    console.error("❌ MongoDB connection failed:", err.message);
+    throw err;
+  }
+};
+
+// ------------------- ROUTES -------------------
+app.get("/", (req, res) => {
+  res.send("Welcome to the backend!");
+});
+
+// ImageKit auth route
 app.get("/api/upload", (req, res) => {
   const result = imagekit.getAuthenticationParameters();
   res.send(result);
 });
 
-app.post("/api/chats", requireAuthSafe, async (req, res) => {
+// Create a new chat
+app.post("/api/chats", ClerkExpressRequireAuth(), async (req, res) => {
+  await connectMongo();
   const userId = req.auth.userId;
   const { text } = req.body;
 
   try {
-    // CREATE A NEW CHAT
     const newChat = new Chat({
-      userId: userId,
+      userId,
       history: [{ role: "user", parts: [{ text }] }],
     });
 
     const savedChat = await newChat.save();
 
-    // CHECK IF THE USERCHATS EXISTS
-    const userChats = await UserChats.find({ userId: userId });
+    const userChats = await UserChats.findOne({ userId });
 
-    // IF DOESN'T EXISTS CREATE A NEW ONE AND ADD THE CHAT IN THE CHATS ARRAY
-    if (!userChats.length) {
+    if (!userChats) {
       const newUserChats = new UserChats({
-        userId: userId,
-        chats: [
-          {
-            _id: savedChat._id,
-            title: text.substring(0, 40),
-          },
-        ],
+        userId,
+        chats: [{ _id: savedChat._id, title: text.substring(0, 40) }],
       });
-
       await newUserChats.save();
     } else {
-      // IF EXISTS, PUSH THE CHAT TO THE EXISTING ARRAY
       await UserChats.updateOne(
-        { userId: userId },
-        {
-          $push: {
-            chats: {
-              _id: savedChat._id,
-              title: text.substring(0, 40),
-            },
-          },
-        }
+        { userId },
+        { $push: { chats: { _id: savedChat._id, title: text.substring(0, 40) } } }
       );
-
-      res.status(201).send(newChat._id);
     }
+
+    res.status(201).send(savedChat._id);
   } catch (err) {
-    console.log(err);
+    console.error("Error creating chat:", err);
     res.status(500).send("Error creating chat!");
   }
 });
 
-app.get("/api/userchats", requireAuthSafe, async (req, res) => {
+// Get all user chats
+app.get("/api/userchats", ClerkExpressRequireAuth(), async (req, res) => {
+  await connectMongo();
   const userId = req.auth.userId;
 
   try {
-    let userChats = await UserChats.findOne({ userId });
-
-    // ✅ Auto-create if missing
-    if (!userChats) {
-      userChats = new UserChats({
-        userId,
-        chats: [],
-      });
-      await userChats.save();
-    }
-
-    res.status(200).send(userChats.chats);
+    const userChats = await UserChats.findOne({ userId });
+    if (!userChats) return res.status(200).json([]);
+    res.status(200).json(userChats.chats);
   } catch (err) {
-    console.error(err);
+    console.error("Error fetching user chats:", err);
     res.status(500).send("Error fetching chat!");
   }
 });
 
-app.get("/api/chats/:id", requireAuthSafe, async (req, res) => {
+// Get single chat
+app.get("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
+  await connectMongo();
   const userId = req.auth.userId;
+  const { id } = req.params;
 
   try {
-    const chat = await Chat.findOne({ _id: req.params.id, userId });
-
-    res.status(200).send(chat);
+    const chat = await Chat.findOne({ _id: id, userId });
+    if (!chat) return res.status(404).send("Chat not found");
+    res.status(200).json(chat);
   } catch (err) {
-    console.log(err);
+    console.error("Error fetching chat:", err);
     res.status(500).send("Error fetching chat!");
   }
 });
 
-app.put("/api/chats/:id", requireAuthSafe, async (req, res) => {
+// Update chat with new messages
+app.put("/api/chats/:id", ClerkExpressRequireAuth(), async (req, res) => {
+  await connectMongo();
   const userId = req.auth.userId;
-
+  const { id } = req.params;
   const { question, answer, img } = req.body;
 
   const newItems = [
-    ...(question
-      ? [{ role: "user", parts: [{ text: question }], ...(img && { img }) }]
-      : []),
+    ...(question ? [{ role: "user", parts: [{ text: question }], ...(img && { img }) }] : []),
     { role: "model", parts: [{ text: answer }] },
   ];
 
   try {
-
-    const updateChat = await Chat.updateOne({ _id: req.params.id, userId },{
-      $push:{
-        history:{
-          $each: newItems,
-        },
-      }
-    });
-    res.status(200).send(updateChat);
+    const update = await Chat.updateOne(
+      { _id: id, userId },
+      { $push: { history: { $each: newItems } } }
+    );
+    res.status(200).json(update);
   } catch (err) {
-    console.log(err);
+    console.error("Error updating chat:", err);
     res.status(500).send("Error adding conversation!");
   }
-})
-
-app.listen(port, () => {
-  connect()
-  console.log("Server running on 3000")
 });
+
+// Test route to check server & Mongo
+app.get("/api/test", async (req, res) => {
+  await connectMongo();
+  res.json({ msg: "Server running", mongo: mongoose.connection.readyState });
+});
+
+// ------------------- ERROR HANDLER -------------------
+app.use((err, req, res, next) => {
+  console.error("❌ Error middleware:", err.stack);
+  res.status(500).send("Internal server error");
+});
+
+// ------------------- START SERVER -------------------
+connectMongo()
+  .then(() => {
+    app.listen(port, () => {
+      console.log(`✅ Server running on port ${port}`);
+    });
+  })
+  .catch((err) => {
+    console.error("❌ Failed to start server:", err);
+  });
